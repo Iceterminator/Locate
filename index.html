@@ -59,7 +59,6 @@
     <div id="map-view" class="w-full h-full">
       <div id="map" class="w-full h-full bg-slate-950"></div>
       
-      <!-- Aide clic -->
       <div class="absolute top-3 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-[11px] text-slate-300 border border-slate-700 pointer-events-none text-center shadow-lg">
         Touche la carte pour ajouter un spot ici
       </div>
@@ -78,8 +77,13 @@
 
     <!-- Bottom Sheet : Détails & Notation d'un spot -->
     <div id="spot-sheet" class="bottom-sheet closed absolute bottom-0 left-0 right-0 max-h-[85%] bg-slate-800 border-t border-slate-700 rounded-t-3xl shadow-2xl z-[500] flex flex-col p-5 pb-8 overflow-y-auto">
-      <div class="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-4 shrink-0"></div>
+      <div class="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-3 shrink-0"></div>
       
+      <!-- Photo du spot si existante -->
+      <div id="sheet-image-container" class="hidden mb-3">
+        <img id="sheet-image" src="" alt="Photo du spot" class="w-full h-44 object-cover rounded-2xl border border-slate-700 shadow-md">
+      </div>
+
       <div class="flex justify-between items-start mb-2">
         <div>
           <span id="sheet-category" class="text-[10px] px-2 py-0.5 rounded-md font-semibold bg-teal-900/80 text-teal-300 uppercase">Catégorie</span>
@@ -127,9 +131,9 @@
     </button>
   </nav>
 
-  <!-- Modal : Ajouter un spot -->
+  <!-- Modal : Ajouter un spot avec Photo -->
   <div id="modal-add" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[600] hidden items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center">
         <h3 class="font-bold text-base text-white">Nouveau Spot</h3>
         <button onclick="closeAddModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -155,6 +159,25 @@
           <label class="block text-slate-400 mb-1">Description courte</label>
           <textarea id="add-desc" rows="2" placeholder="Accès facile, calme, belle ombre..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500"></textarea>
         </div>
+
+        <!-- Champ Photo -->
+        <div>
+          <label class="block text-slate-400 mb-1">Photo du spot (optionnel)</label>
+          <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-teal-500 rounded-xl p-3 cursor-pointer bg-slate-900/60 transition text-center">
+            <i class="fa-solid fa-camera text-slate-400 text-lg mb-1"></i>
+            <span id="photo-label-text" class="text-[11px] text-slate-300">Prendre ou choisir une photo</span>
+            <input type="file" id="add-photo" accept="image/*" class="hidden" onchange="handlePhotoSelect(event)">
+          </label>
+          
+          <!-- Prévisualisation Photo -->
+          <div id="photo-preview-wrapper" class="relative hidden mt-2">
+            <img id="photo-preview" src="" alt="Aperçu" class="w-full h-28 object-cover rounded-xl border border-slate-700">
+            <button onclick="removeSelectedPhoto()" type="button" class="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center shadow">
+              <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+          </div>
+        </div>
+
         <div>
           <label class="block text-slate-400 mb-1">Ta note initiale</label>
           <div class="flex gap-2 text-2xl text-amber-400" id="add-stars-container">
@@ -170,7 +193,7 @@
       <input type="hidden" id="add-lat">
       <input type="hidden" id="add-lng">
 
-      <button onclick="saveSpotToFirebase()" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-2.5 rounded-xl transition active:scale-95 text-xs shadow-lg shadow-teal-500/20">
+      <button id="btn-save-spot" onclick="saveSpotToFirebase()" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-2.5 rounded-xl transition active:scale-95 text-xs shadow-lg shadow-teal-500/20">
         Publier pour tout le monde
       </button>
     </div>
@@ -232,7 +255,6 @@
     // ==========================================
     const map = L.map('map', { zoomControl: false }).setView([43.70, 7.26], 13);
     
-    // Tuiles Esri gratuites sans restriction
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Esri',
       maxZoom: 18
@@ -244,6 +266,7 @@
     let currentAddRating = 5;
     let currentRevRating = 5;
     let userLocationMarker = null;
+    let currentBase64Image = null;
 
     const catColors = {
       vue: '#0284c7',
@@ -255,7 +278,57 @@
     };
 
     // ==========================================
-    // 3. SYNCHRONISATION EN TEMPS RÉEL
+    // 3. COMPRESSION & GESTION PHOTO (CANVAS)
+    // ==========================================
+    function handlePhotoSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // Redimensionner à max 800px pour un poids ultra-léger (~50-80ko)
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 800;
+
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          currentBase64Image = canvas.toDataURL('image/jpeg', 0.7);
+
+          // Afficher la prévisualisation
+          document.getElementById('photo-preview').src = currentBase64Image;
+          document.getElementById('photo-preview-wrapper').classList.remove('hidden');
+          document.getElementById('photo-label-text').innerText = "Photo sélectionnée ✓";
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeSelectedPhoto() {
+      currentBase64Image = null;
+      document.getElementById('add-photo').value = '';
+      document.getElementById('photo-preview').src = '';
+      document.getElementById('photo-preview-wrapper').classList.add('hidden');
+      document.getElementById('photo-label-text').innerText = "Prendre ou choisir une photo";
+    }
+
+    // ==========================================
+    // 4. SYNCHRONISATION EN TEMPS RÉEL (FIRESTORE)
     // ==========================================
     function setupRealtimeSync() {
       const indicator = document.getElementById('sync-indicator');
@@ -319,21 +392,28 @@
         marker.on('click', () => openSpotDetails(spot));
         markersMap[spot.id] = marker;
 
-        // 2. Ajouter la carte dans la vue liste
+        // 2. Ajouter la carte dans la vue liste (avec miniature si présente)
         const card = document.createElement('div');
-        card.className = "bg-slate-800/90 border border-slate-700 rounded-2xl p-4 flex items-center justify-between active:scale-[0.99] transition";
+        card.className = "bg-slate-800/90 border border-slate-700 rounded-2xl p-3 flex items-center justify-between active:scale-[0.99] transition";
         card.innerHTML = `
-          <div class="pr-2">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-[10px] px-2 py-0.5 rounded font-semibold uppercase text-white" style="background:${color}">${spot.category || 'spot'}</span>
-              <span class="text-xs font-bold text-amber-400 flex items-center gap-1">
-                ${avg} <i class="fa-solid fa-star"></i> (${count})
-              </span>
+          <div class="flex items-center gap-3 overflow-hidden">
+            ${spot.image ? `<img src="${spot.image}" class="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-700" alt="spot">` : `
+              <div class="w-14 h-14 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 text-slate-600">
+                <i class="fa-solid fa-image text-lg"></i>
+              </div>
+            `}
+            <div class="overflow-hidden pr-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[9px] px-2 py-0.5 rounded font-semibold uppercase text-white" style="background:${color}">${spot.category || 'spot'}</span>
+                <span class="text-xs font-bold text-amber-400 flex items-center gap-1">
+                  ${avg} <i class="fa-solid fa-star text-[10px]"></i> (${count})
+                </span>
+              </div>
+              <h4 class="font-bold text-sm text-white truncate">${spot.title}</h4>
+              <p class="text-xs text-slate-400 truncate mt-0.5">${spot.description || 'Pas de description'}</p>
             </div>
-            <h4 class="font-bold text-sm text-white">${spot.title}</h4>
-            <p class="text-xs text-slate-400 line-clamp-1 mt-0.5">${spot.description || 'Pas de description'}</p>
           </div>
-          <button onclick="focusSpot('${spot.id}')" class="w-9 h-9 bg-slate-700 text-teal-400 rounded-full flex items-center justify-center shrink-0">
+          <button onclick="focusSpot('${spot.id}')" class="w-8 h-8 bg-slate-700 text-teal-400 rounded-full flex items-center justify-center shrink-0 ml-2">
             <i class="fa-solid fa-arrow-right text-xs"></i>
           </button>
         `;
@@ -342,11 +422,12 @@
     }
 
     // ==========================================
-    // 4. GESTION DES CLICS & MODALS
+    // 5. GESTION DES CLICS & MODALS
     // ==========================================
     map.on('click', (e) => {
       document.getElementById('add-lat').value = e.latlng.lat;
       document.getElementById('add-lng').value = e.latlng.lng;
+      removeSelectedPhoto();
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
     });
@@ -355,6 +436,7 @@
       const center = map.getCenter();
       document.getElementById('add-lat').value = center.lat;
       document.getElementById('add-lng').value = center.lng;
+      removeSelectedPhoto();
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
     }
@@ -362,6 +444,7 @@
     function closeAddModal() {
       document.getElementById('modal-add').classList.add('hidden');
       document.getElementById('modal-add').classList.remove('flex');
+      removeSelectedPhoto();
     }
 
     function openSpotDetails(spot) {
@@ -370,6 +453,16 @@
       document.getElementById('sheet-category').innerText = spot.category;
       document.getElementById('sheet-desc').innerText = spot.description || 'Aucune description disponible.';
       
+      // Image du spot
+      const imgContainer = document.getElementById('sheet-image-container');
+      const imgElem = document.getElementById('sheet-image');
+      if (spot.image) {
+        imgElem.src = spot.image;
+        imgContainer.classList.remove('hidden');
+      } else {
+        imgContainer.classList.add('hidden');
+      }
+
       const avg = calculateAverage(spot.reviews);
       document.getElementById('sheet-rating').innerText = avg;
       const count = spot.reviews ? spot.reviews.length : 0;
@@ -427,7 +520,7 @@
     }
 
     // ==========================================
-    // 5. ENREGISTREMENT FIREBASE
+    // 6. ENREGISTREMENT FIREBASE
     // ==========================================
     async function saveSpotToFirebase() {
       const title = document.getElementById('add-title').value.trim();
@@ -438,12 +531,17 @@
 
       if (!title) return alert("Veuillez indiquer un titre");
 
+      const btn = document.getElementById('btn-save-spot');
+      btn.innerText = "Publication...";
+      btn.disabled = true;
+
       const newSpot = {
         title,
         description: desc,
         category: cat,
         lat,
         lng,
+        image: currentBase64Image || null,
         createdAt: new Date().toISOString(),
         reviews: [{
           author: "Créateur",
@@ -458,8 +556,12 @@
         closeAddModal();
         document.getElementById('add-title').value = '';
         document.getElementById('add-desc').value = '';
+        removeSelectedPhoto();
       } catch (err) {
         alert("Erreur lors de l'enregistrement : " + err.message);
+      } finally {
+        btn.innerText = "Publier pour tout le monde";
+        btn.disabled = false;
       }
     }
 
@@ -497,6 +599,7 @@
       }
     }
 
+    // Gestion notation étoiles
     function setAddRating(n) {
       currentAddRating = n;
       const stars = document.getElementById('add-stars-container').children;
@@ -514,7 +617,7 @@
     }
 
     // ==========================================
-    // 6. GÉOLOCALISATION GPS ROBUSTE
+    // 7. GÉOLOCALISATION GPS
     // ==========================================
     let isLocating = false;
 
@@ -549,8 +652,7 @@
       }
 
       function onError(err) {
-        // En cas de timeout (GPS trop lent à fixer), bascule automatique sur le réseau Wi-Fi/cellulaire
-        if (err.code === 3 /* TIMEOUT */) {
+        if (err.code === 3) {
           navigator.geolocation.getCurrentPosition(
             onSuccess,
             () => {
@@ -565,7 +667,7 @@
 
         isLocating = false;
         text.innerText = prevText;
-        if (err.code === 1 /* PERMISSION_DENIED */) {
+        if (err.code === 1) {
           alert("Accès à la position refusé. Vérifiez les autorisations de votre navigateur.");
         } else {
           alert("Position momentanément indisponible.");
@@ -574,12 +676,12 @@
 
       navigator.geolocation.getCurrentPosition(onSuccess, onError, {
         enableHighAccuracy: true,
-        timeout: 15000, // 15s pour laisser le temps de fixer sans fausse alerte
+        timeout: 15000,
         maximumAge: 10000
       });
     }
 
-    // Démarrage
+    // Démarrage de l'écoute Firestore
     setupRealtimeSync();
   </script>
 </body>
