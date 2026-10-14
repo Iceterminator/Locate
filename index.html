@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Locate - Partage & Notation de Spots</title>
   
+  <!-- Métadonnées PWA & Mobile -->
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Locate">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/854/854878.png">
+  <link id="manifest-placeholder" rel="manifest">
+
   <!-- Tailwind CSS & FontAwesome -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -50,6 +58,12 @@
     </div>
 
     <div class="flex items-center gap-2">
+      <!-- Bouton Installation PWA (affiché uniquement si compatible) -->
+      <button id="btn-install-pwa" onclick="installPWA()" class="hidden px-2.5 py-1.5 bg-teal-500/20 text-teal-300 border border-teal-500/40 rounded-full text-xs font-semibold items-center gap-1">
+        <i class="fa-solid fa-download text-xs"></i>
+        <span>Installer</span>
+      </button>
+
       <!-- Toggle Mode Consultation / Ajout -->
       <button id="btn-toggle-mode" onclick="toggleMapMode()" class="px-3 py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 transition">
         <i id="mode-icon" class="fa-solid fa-eye text-teal-400"></i>
@@ -77,16 +91,19 @@
       </div>
     </div>
 
-    <!-- Vue Liste avec Onglets (Mes spots vs Publics) + Filtres & Tri -->
+    <!-- Vue Liste avec Onglets (Tous vs Mes Spots vs Favoris) + Filtres & Tri -->
     <div id="list-view" class="w-full h-full bg-slate-900 overflow-y-auto p-4 pb-24 hidden space-y-3 z-10">
       
-      <!-- Sélecteur d'onglet interne : Tous vs Mes Spots -->
-      <div class="grid grid-cols-2 gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-        <button id="subtab-all" onclick="switchListSubtab('all')" class="py-2 text-xs font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition">
-          Tous les spots (<span id="count-all">0</span>)
+      <!-- Sélecteur d'onglet interne : Tous vs Mes Spots vs Favoris -->
+      <div class="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+        <button id="subtab-all" onclick="switchListSubtab('all')" class="py-2 text-[11px] font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition">
+          Tous (<span id="count-all">0</span>)
         </button>
-        <button id="subtab-my" onclick="switchListSubtab('my')" class="py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition">
+        <button id="subtab-my" onclick="switchListSubtab('my')" class="py-2 text-[11px] font-bold rounded-lg text-slate-400 hover:text-white transition">
           Mes spots (<span id="count-my">0</span>)
+        </button>
+        <button id="subtab-fav" onclick="switchListSubtab('fav')" class="py-2 text-[11px] font-bold rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center gap-1">
+          <i class="fa-solid fa-heart text-rose-500 text-[10px]"></i> Favoris (<span id="count-fav">0</span>)
         </button>
       </div>
 
@@ -119,10 +136,13 @@
     <!-- Bottom Sheet : Détails d'un spot -->
     <div id="spot-sheet" class="bottom-sheet closed absolute bottom-0 left-0 right-0 max-h-[88%] bg-slate-800 border-t border-slate-700 rounded-t-3xl shadow-2xl z-[500] flex flex-col p-4 pb-8 overflow-y-auto">
       
-      <!-- Barre d'entête de la fiche avec Croix bien visible tout en haut -->
+      <!-- Barre d'entête de la fiche avec Favori et Croix de fermeture -->
       <div class="flex justify-between items-center mb-3">
+        <button id="sheet-btn-fav" onclick="toggleFavoriteFromSheet()" class="w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-400 flex items-center justify-center shadow-lg transition">
+          <i class="fa-solid fa-heart text-base"></i>
+        </button>
         <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto"></div>
-        <button onclick="closeSheet()" class="w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-200 flex items-center justify-center shadow-lg ml-auto">
+        <button onclick="closeSheet()" class="w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-200 flex items-center justify-center shadow-lg">
           <i class="fa-solid fa-xmark text-base"></i>
         </button>
       </div>
@@ -389,7 +409,62 @@
 
   <script>
     // ==========================================
-    // 1. FIREBASE & USER ID
+    // 0. CONFIGURATION PWA (INSTALLABLE)
+    // ==========================================
+    const manifestData = {
+      name: "Locate Spots",
+      short_name: "Locate",
+      description: "Partage et notation de spots en direct",
+      start_url: "./index.html",
+      display: "standalone",
+      background_color: "#0f172a",
+      theme_color: "#0f172a",
+      icons: [
+        {
+          src: "https://cdn-icons-png.flaticon.com/512/854/854878.png",
+          sizes: "512x512",
+          type: "image/png"
+        }
+      ]
+    };
+    const stringManifest = JSON.stringify(manifestData);
+    const blobManifest = new Blob([stringManifest], { type: 'application/json' });
+    document.querySelector('#manifest-placeholder').setAttribute('href', URL.createObjectURL(blobManifest));
+
+    // Service Worker inline
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        self.addEventListener('install', (e) => self.skipWaiting());
+        self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));
+        self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
+      `;
+      const blobSW = new Blob([swCode], { type: 'application/javascript' });
+      navigator.serviceWorker.register(URL.createObjectURL(blobSW)).catch(() => {});
+    }
+
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btnInstall = document.getElementById('btn-install-pwa');
+      if (btnInstall) {
+        btnInstall.classList.remove('hidden');
+        btnInstall.classList.add('flex');
+      }
+    });
+
+    function installPWA() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(() => {
+          deferredPrompt = null;
+          document.getElementById('btn-install-pwa').classList.add('hidden');
+        });
+      }
+    }
+
+    // ==========================================
+    // 1. FIREBASE & USER ID & FAVORIS
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyCLhb4dgaX6_WCis384aZmZjWIZliI4WpY",
@@ -409,10 +484,45 @@
       localStorage.setItem('locate_device_uid', myUserId);
     }
 
+    // Gestion des Favoris
+    let myFavorites = JSON.parse(localStorage.getItem('locate_user_favorites') || '[]');
+
+    function isFavorite(spotId) {
+      return myFavorites.includes(spotId);
+    }
+
+    function toggleFavorite(spotId, event) {
+      if (event) event.stopPropagation();
+      if (isFavorite(spotId)) {
+        myFavorites = myFavorites.filter(id => id !== spotId);
+      } else {
+        myFavorites.push(spotId);
+      }
+      localStorage.setItem('locate_user_favorites', JSON.stringify(myFavorites));
+      renderLists();
+      if (selectedSpot && selectedSpot.id === spotId) {
+        updateSheetFavButton();
+      }
+    }
+
+    function toggleFavoriteFromSheet() {
+      if (!selectedSpot) return;
+      toggleFavorite(selectedSpot.id);
+    }
+
+    function updateSheetFavButton() {
+      const btn = document.getElementById('sheet-btn-fav');
+      if (!selectedSpot || !btn) return;
+      if (isFavorite(selectedSpot.id)) {
+        btn.className = "w-8 h-8 rounded-full bg-rose-600/30 text-rose-500 border border-rose-500/40 flex items-center justify-center shadow-lg transition";
+      } else {
+        btn.className = "w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 text-slate-400 flex items-center justify-center shadow-lg transition";
+      }
+    }
+
     // ==========================================
-    // 2. CARTE LEAFLET (OUVERTURE SUR LA FRANCE ENTIÈRE)
+    // 2. CARTE LEAFLET (FRANCE ENTIÈRE)
     // ==========================================
-    // Coordonnées du centre de la France [46.603354, 1.888334] au zoom 6
     const map = L.map('map', { zoomControl: false }).setView([46.603354, 1.888334], 6);
     
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
@@ -426,12 +536,10 @@
     let currentAddRating = 5;
     let currentRevRating = 5;
     let userLocationMarker = null;
-    let currentSubtab = 'all';
+    let currentSubtab = 'all'; // 'all', 'my' ou 'fav'
 
-    // Gestion des deux modes de carte : 'view' ou 'add'
     let currentMapMode = 'view'; 
 
-    // Gestion multi-photos
     let addPhotosList = [];
     let editPhotosList = [];
     let currentSheetPhotos = [];
@@ -475,7 +583,6 @@
     }
 
     map.on('click', (e) => {
-      // En mode consultation, le clic ne crée rien !
       if (currentMapMode !== 'add') return;
 
       document.getElementById('add-lat').value = e.latlng.lat.toFixed(6);
@@ -487,7 +594,7 @@
     });
 
     // ==========================================
-    // 4. COMPRESSION & GESTION MULTI-PHOTOS (CANVAS)
+    // 4. COMPRESSION ET GESTION PHOTOS
     // ==========================================
     async function compressImageFile(file) {
       return new Promise((resolve) => {
@@ -566,7 +673,7 @@
     }
 
     // ==========================================
-    // 5. VISUALISATION DES PHOTOS & LIGHTBOX
+    // 5. GALERIE PHOTOS ET LIGHTBOX
     // ==========================================
     function setupSheetGallery(photos) {
       const container = document.getElementById('sheet-gallery-container');
@@ -634,7 +741,7 @@
     }
 
     // ==========================================
-    // 6. FIRESTORE SYNC & UI
+    // 6. FIRESTORE SYNC & UI (SANS AUTO-OPEN)
     // ==========================================
     function setupRealtimeSync() {
       const indicator = document.getElementById('sync-indicator');
@@ -653,7 +760,9 @@
         updateMapMarkers();
         renderLists();
 
-        if (selectedSpot) {
+        // Met à jour la fiche UNIQUEMENT si l'utilisateur l'a ouverte manuellement
+        const sheet = document.getElementById('spot-sheet');
+        if (selectedSpot && !sheet.classList.contains('closed')) {
           const updated = currentSpots.find(s => s.id === selectedSpot.id);
           if (updated) openSpotDetails(updated);
         }
@@ -695,13 +804,18 @@
       currentSubtab = tab;
       const btnAll = document.getElementById('subtab-all');
       const btnMy = document.getElementById('subtab-my');
+      const btnFav = document.getElementById('subtab-fav');
+
+      btnAll.className = "py-2 text-[11px] font-bold rounded-lg text-slate-400 hover:text-white transition";
+      btnMy.className = "py-2 text-[11px] font-bold rounded-lg text-slate-400 hover:text-white transition";
+      btnFav.className = "py-2 text-[11px] font-bold rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center gap-1";
 
       if (tab === 'all') {
-        btnAll.className = "py-2 text-xs font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition";
-        btnMy.className = "py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition";
-      } else {
-        btnMy.className = "py-2 text-xs font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition";
-        btnAll.className = "py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition";
+        btnAll.className = "py-2 text-[11px] font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition";
+      } else if (tab === 'my') {
+        btnMy.className = "py-2 text-[11px] font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition";
+      } else if (tab === 'fav') {
+        btnFav.className = "py-2 text-[11px] font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition flex items-center justify-center gap-1";
       }
       renderLists();
     }
@@ -712,12 +826,20 @@
       const sortBy = document.getElementById('sort-by').value;
 
       const mySpotsCount = currentSpots.filter(s => s.userId === myUserId).length;
+      const favSpotsCount = currentSpots.filter(s => isFavorite(s.id)).length;
+
       document.getElementById('count-all').innerText = currentSpots.length;
       document.getElementById('count-my').innerText = mySpotsCount;
+      document.getElementById('count-fav').innerText = favSpotsCount;
 
-      let list = currentSubtab === 'my' 
-        ? currentSpots.filter(s => s.userId === myUserId) 
-        : [...currentSpots];
+      let list = [];
+      if (currentSubtab === 'my') {
+        list = currentSpots.filter(s => s.userId === myUserId);
+      } else if (currentSubtab === 'fav') {
+        list = currentSpots.filter(s => isFavorite(s.id));
+      } else {
+        list = [...currentSpots];
+      }
 
       if (selectedCat !== 'all') {
         list = list.filter(s => s.category === selectedCat);
@@ -739,9 +861,10 @@
       container.innerHTML = '';
 
       if (list.length === 0) {
-        container.innerHTML = currentSubtab === 'my'
-          ? '<div class="text-center text-slate-500 py-10 text-xs">Vous n\'avez pas encore ajouté de spot.</div>'
-          : '<div class="text-center text-slate-500 py-10 text-xs">Aucun spot ne correspond à vos filtres.</div>';
+        let msg = "Aucun spot ne correspond à vos filtres.";
+        if (currentSubtab === 'my') msg = "Vous n'avez pas encore ajouté de spot.";
+        if (currentSubtab === 'fav') msg = "Aucun spot favori pour l'instant. Touchez le cœur ❤️ pour en ajouter.";
+        container.innerHTML = `<div class="text-center text-slate-500 py-10 text-xs">${msg}</div>`;
         return;
       }
 
@@ -750,8 +873,8 @@
         const count = spot.reviews ? spot.reviews.length : 0;
         const color = catColors[spot.category] || '#64748b';
         const isMine = spot.userId === myUserId;
-        
-        // Image de couverture : première photo de la liste ou ancienne clé image
+        const isFav = isFavorite(spot.id);
+
         const coverImage = (spot.images && spot.images.length > 0) ? spot.images[0] : (spot.image || null);
 
         const card = document.createElement('div');
@@ -777,6 +900,9 @@
           </div>
 
           <div class="flex items-center gap-1.5 ml-2">
+            <button onclick="toggleFavorite('${spot.id}', event)" title="Favori" class="w-8 h-8 rounded-full ${isFav ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40' : 'bg-slate-700/80 text-slate-400'} flex items-center justify-center active:scale-90 transition">
+              <i class="fa-solid fa-heart text-xs"></i>
+            </button>
             ${isMine ? `
               <button onclick="openEditModal('${spot.id}')" title="Modifier" class="w-8 h-8 bg-slate-700/80 active:bg-slate-600 text-amber-300 rounded-full flex items-center justify-center">
                 <i class="fa-solid fa-pen text-xs"></i>
@@ -825,7 +951,8 @@
       document.getElementById('sheet-category').innerText = spot.category;
       document.getElementById('sheet-desc').innerText = spot.description || 'Aucune description disponible.';
       
-      // Récupérer les photos (compatibilité multi-photos + ancienne clé unique 'image')
+      updateSheetFavButton();
+
       const photos = spot.images || (spot.image ? [spot.image] : []);
       setupSheetGallery(photos);
 
@@ -858,6 +985,7 @@
 
     function closeSheet() {
       document.getElementById('spot-sheet').classList.add('closed');
+      selectedSpot = null; // Évite la réouverture non désirée
     }
 
     function focusSpot(id) {
@@ -959,7 +1087,7 @@
     }
 
     // ==========================================
-    // 9. PUBLICATION & AVIS FIREBASE
+    // 9. PUBLICATION & AVIS FIREBASE (CORRIGÉ)
     // ==========================================
     async function saveSpotToFirebase() {
       const title = document.getElementById('add-title').value.trim();
@@ -993,14 +1121,18 @@
       };
 
       try {
+        // Désactive explicitement toute sélection préalable pour ne rien ouvrir
+        selectedSpot = null;
+        closeSheet();
+
         await db.collection('spots').add(newSpot);
+        
         closeAddModal();
         document.getElementById('add-title').value = '';
         document.getElementById('add-desc').value = '';
         addPhotosList = [];
         renderPhotosGrid('add');
         
-        // Rebascule en mode consultation après un ajout
         if (currentMapMode === 'add') toggleMapMode();
       } catch (err) {
         alert("Erreur lors de l'enregistrement : " + err.message);
