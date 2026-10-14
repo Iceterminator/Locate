@@ -79,7 +79,6 @@
 
       <!-- Filtres et Tri -->
       <div class="flex gap-2">
-        <!-- Filtre Catégorie -->
         <select id="filter-cat" onchange="renderLists()" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
           <option value="all">Toutes catégories</option>
           <option value="vue">🌄 Vues panoramiques</option>
@@ -90,7 +89,6 @@
           <option value="autre">📍 Autre</option>
         </select>
 
-        <!-- Sélecteur de Tri -->
         <select id="sort-by" onchange="renderLists()" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
           <option value="rating_desc">⭐ Meilleures notes</option>
           <option value="reviews_desc">💬 Plus d'avis</option>
@@ -184,6 +182,27 @@
             <option value="autre">📍 Autre</option>
           </select>
         </div>
+
+        <!-- Coordonnées GPS Visibles & Interactives -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-slate-400">Coordonnées GPS</label>
+            <button type="button" onclick="fillAddModalWithCurrentGPS()" class="text-[10px] text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1">
+              <i class="fa-solid fa-location-crosshairs"></i> Ma position actuelle
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-[10px] text-slate-500 block mb-0.5">Latitude</span>
+              <input type="number" step="any" id="add-lat" placeholder="43.7000" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-500 block mb-0.5">Longitude</span>
+              <input type="number" step="any" id="add-lng" placeholder="7.2600" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
+            </div>
+          </div>
+        </div>
+
         <div>
           <label class="block text-slate-400 mb-1">Description</label>
           <textarea id="add-desc" rows="2" placeholder="Accès facile, belle vue..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500"></textarea>
@@ -217,9 +236,6 @@
         </div>
       </div>
 
-      <input type="hidden" id="add-lat">
-      <input type="hidden" id="add-lng">
-
       <button id="btn-save-spot" onclick="saveSpotToFirebase()" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-2.5 rounded-xl transition active:scale-95 text-xs shadow-lg shadow-teal-500/20">
         Publier le spot
       </button>
@@ -251,6 +267,19 @@
             <option value="nature">🌳 Nature</option>
             <option value="autre">📍 Autre</option>
           </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Coordonnées GPS</label>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-[10px] text-slate-500 block mb-0.5">Latitude</span>
+              <input type="number" step="any" id="edit-lat" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-500 block mb-0.5">Longitude</span>
+              <input type="number" step="any" id="edit-lng" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
+            </div>
+          </div>
         </div>
         <div>
           <label class="block text-slate-400 mb-1">Description</label>
@@ -334,7 +363,6 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // Identifiant unique anonyme stocké en local sur l'appareil
     let myUserId = localStorage.getItem('locate_device_uid');
     if (!myUserId) {
       myUserId = 'user_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -359,7 +387,7 @@
     let userLocationMarker = null;
     let addBase64Image = null;
     let editBase64Image = null;
-    let currentSubtab = 'all'; // 'all' ou 'my'
+    let currentSubtab = 'all';
 
     const catColors = {
       vue: '#0284c7',
@@ -513,22 +541,18 @@
       const selectedCat = document.getElementById('filter-cat').value;
       const sortBy = document.getElementById('sort-by').value;
 
-      // Calcul des compteurs
       const mySpotsCount = currentSpots.filter(s => s.userId === myUserId).length;
       document.getElementById('count-all').innerText = currentSpots.length;
       document.getElementById('count-my').innerText = mySpotsCount;
 
-      // 1. Filtrer selon l'onglet actif (Tous vs Mes Spots)
       let list = currentSubtab === 'my' 
         ? currentSpots.filter(s => s.userId === myUserId) 
         : [...currentSpots];
 
-      // 2. Filtrer par Catégorie
       if (selectedCat !== 'all') {
         list = list.filter(s => s.category === selectedCat);
       }
 
-      // 3. Tri
       list.sort((a, b) => {
         const avgA = parseFloat(calculateAverage(a.reviews)) || 0;
         const avgB = parseFloat(calculateAverage(b.reviews)) || 0;
@@ -598,8 +622,8 @@
     // 6. GESTION DES CLICS & MODALS
     // ==========================================
     map.on('click', (e) => {
-      document.getElementById('add-lat').value = e.latlng.lat;
-      document.getElementById('add-lng').value = e.latlng.lng;
+      document.getElementById('add-lat').value = e.latlng.lat.toFixed(6);
+      document.getElementById('add-lng').value = e.latlng.lng.toFixed(6);
       removePhoto('add');
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
@@ -607,8 +631,8 @@
 
     function openAddModal() {
       const center = map.getCenter();
-      document.getElementById('add-lat').value = center.lat;
-      document.getElementById('add-lng').value = center.lng;
+      document.getElementById('add-lat').value = center.lat.toFixed(6);
+      document.getElementById('add-lng').value = center.lng.toFixed(6);
       removePhoto('add');
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
@@ -618,6 +642,16 @@
       document.getElementById('modal-add').classList.add('hidden');
       document.getElementById('modal-add').classList.remove('flex');
       removePhoto('add');
+    }
+
+    function fillAddModalWithCurrentGPS() {
+      if (!navigator.geolocation) return alert("Géolocalisation indisponible");
+      navigator.geolocation.getCurrentPosition((pos) => {
+        document.getElementById('add-lat').value = pos.coords.latitude.toFixed(6);
+        document.getElementById('add-lng').value = pos.coords.longitude.toFixed(6);
+      }, () => {
+        alert("Impossible de récupérer votre position GPS actuelle.");
+      }, { enableHighAccuracy: true, timeout: 10000 });
     }
 
     function openSpotDetails(spot) {
@@ -702,6 +736,8 @@
       document.getElementById('edit-spot-id').value = spot.id;
       document.getElementById('edit-title').value = spot.title;
       document.getElementById('edit-cat').value = spot.category;
+      document.getElementById('edit-lat').value = spot.lat;
+      document.getElementById('edit-lng').value = spot.lng;
       document.getElementById('edit-desc').value = spot.description || '';
 
       editBase64Image = spot.image || null;
@@ -726,8 +762,11 @@
       const title = document.getElementById('edit-title').value.trim();
       const desc = document.getElementById('edit-desc').value.trim();
       const category = document.getElementById('edit-cat').value;
+      const lat = parseFloat(document.getElementById('edit-lat').value);
+      const lng = parseFloat(document.getElementById('edit-lng').value);
 
       if (!title) return alert("Le nom est obligatoire");
+      if (isNaN(lat) || isNaN(lng)) return alert("Coordonnées GPS invalides");
 
       const btn = document.getElementById('btn-save-edit');
       btn.innerText = "Enregistrement...";
@@ -738,6 +777,8 @@
           title,
           description: desc,
           category,
+          lat,
+          lng,
           image: editBase64Image || null
         });
         closeEditModal();
@@ -773,6 +814,7 @@
       const lng = parseFloat(document.getElementById('add-lng').value);
 
       if (!title) return alert("Veuillez indiquer un titre");
+      if (isNaN(lat) || isNaN(lng)) return alert("Veuillez renseigner des coordonnées GPS valides");
 
       const btn = document.getElementById('btn-save-spot');
       btn.innerText = "Publication...";
@@ -785,7 +827,7 @@
         lat,
         lng,
         image: addBase64Image || null,
-        userId: myUserId, // Lie le spot à votre appareil
+        userId: myUserId,
         createdAt: new Date().toISOString(),
         reviews: [{
           author: "Créateur",
