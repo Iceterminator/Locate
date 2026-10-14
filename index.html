@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Firebase SDK (Compat pour script unique) -->
+  <!-- Firebase SDK (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
@@ -36,10 +36,10 @@
   <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between z-20 shrink-0">
     <div class="flex items-center gap-2">
       <div class="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white font-bold shadow-md shadow-teal-500/20">
-        <i class="fa-solid fa-tion-dot"></i>
+        <i class="fa-solid fa-location-dot"></i>
       </div>
       <div>
-        <h1 class="font-bold leading-none text-base">te</h1>
+        <h1 class="font-bold leading-none text-base">Locate</h1>
         <div class="flex items-center gap-1.5 mt-0.5">
           <span id="sync-indicator" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
           <span id="sync-text" class="text-[10px] text-slate-400">Connexion cloud...</span>
@@ -47,8 +47,8 @@
       </div>
     </div>
 
-    <button onclick="triggerte()" class="px-3 py-1.5 bg-slate-800 active:bg-slate-700 text-teal-400 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow">
-      <i class="fa-solid fa-tion-crosshairs text-sm"></i>
+    <button onclick="triggerLocate()" class="px-3 py-1.5 bg-slate-800 active:bg-slate-700 text-teal-400 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow">
+      <i class="fa-solid fa-location-crosshairs text-sm"></i>
       <span>Moi</span>
     </button>
   </header>
@@ -213,7 +213,7 @@
 
   <script>
     // ==========================================
-    // 1. CONFIGURATION FIREBASE INTÉGRÉE
+    // 1. CONFIGURATION FIREBASE
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyCLhb4dgaX6_WCis384aZmZjWIZliI4WpY",
@@ -232,7 +232,7 @@
     // ==========================================
     const map = L.map('map', { zoomControl: false }).setView([43.70, 7.26], 13);
     
-    // Tuiles Esri gratuites sans bge
+    // Tuiles Esri gratuites sans restriction
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Esri',
       maxZoom: 18
@@ -243,7 +243,7 @@
     let selectedSpot = null;
     let currentAddRating = 5;
     let currentRevRating = 5;
-    let usertionMarker = null;
+    let userLocationMarker = null;
 
     const catColors = {
       vue: '#0284c7',
@@ -255,13 +255,12 @@
     };
 
     // ==========================================
-    // 3. SYNCHRONISATION EN TEMPS RÉEL (FIRESTORE)
+    // 3. SYNCHRONISATION EN TEMPS RÉEL
     // ==========================================
     function setupRealtimeSync() {
       const indicator = document.getElementById('sync-indicator');
       const text = document.getElementById('sync-text');
 
-      // Écoute en direct des changements dans la collection 'spots'
       db.collection('spots').onSnapshot((snapshot) => {
         indicator.className = "w-2 h-2 rounded-full bg-emerald-400";
         text.innerText = "Synchronisé en direct";
@@ -274,7 +273,6 @@
         currentSpots = spots;
         updateUI();
 
-        // Mettre à jour la vue détaillée si ouverte
         if (selectedSpot) {
           const updated = currentSpots.find(s => s.id === selectedSpot.id);
           if (updated) openSpotDetails(updated);
@@ -293,7 +291,6 @@
     }
 
     function updateUI() {
-      // Nettoyer les marqueurs
       Object.values(markersMap).forEach(m => map.removeLayer(m));
       markersMap = {};
 
@@ -500,7 +497,6 @@
       }
     }
 
-    // Gestion notation étoiles
     function setAddRating(n) {
       currentAddRating = n;
       const stars = document.getElementById('add-stars-container').children;
@@ -517,7 +513,9 @@
       }
     }
 
-    // Localisation Mobile GPS fiable
+    // ==========================================
+    // 6. GÉOLOCALISATION GPS ROBUSTE
+    // ==========================================
     let isLocating = false;
 
     function triggerLocate() {
@@ -530,7 +528,7 @@
       isLocating = true;
       const text = document.getElementById('sync-text');
       const prevText = text.innerText;
-      text.innerText = "Recherche GPS en cours...";
+      text.innerText = "Recherche GPS...";
 
       function onSuccess(pos) {
         isLocating = false;
@@ -551,14 +549,14 @@
       }
 
       function onError(err) {
-        // Tentative de repli (basse précision / Wi-Fi rapide) si le GPS précis tarde
+        // En cas de timeout (GPS trop lent à fixer), bascule automatique sur le réseau Wi-Fi/cellulaire
         if (err.code === 3 /* TIMEOUT */) {
           navigator.geolocation.getCurrentPosition(
             onSuccess,
             () => {
               isLocating = false;
               text.innerText = prevText;
-              alert("Signal GPS trop faible ou inaccessible.");
+              alert("Signal GPS inaccessible.");
             },
             { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
           );
@@ -568,7 +566,7 @@
         isLocating = false;
         text.innerText = prevText;
         if (err.code === 1 /* PERMISSION_DENIED */) {
-          alert("Accès à la position refusé dans les paramètres du navigateur.");
+          alert("Accès à la position refusé. Vérifiez les autorisations de votre navigateur.");
         } else {
           alert("Position momentanément indisponible.");
         }
@@ -576,12 +574,12 @@
 
       navigator.geolocation.getCurrentPosition(onSuccess, onError, {
         enableHighAccuracy: true,
-        timeout: 15000, // 15 secondes pour laisser le temps au premier fix
+        timeout: 15000, // 15s pour laisser le temps de fixer sans fausse alerte
         maximumAge: 10000
       });
     }
 
-    // Démarrage de l'écoute Firestore
+    // Démarrage
     setupRealtimeSync();
   </script>
 </body>
