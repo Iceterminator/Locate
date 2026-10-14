@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Firebase SDK (Compat) -->
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
@@ -55,22 +55,52 @@
 
   <!-- Zone Principale : Vue Carte & Vue Liste -->
   <main class="flex-1 relative overflow-hidden">
-    <!-- Carte Leaflet -->
+    <!-- Vue Carte -->
     <div id="map-view" class="w-full h-full">
       <div id="map" class="w-full h-full bg-slate-950"></div>
       
       <div class="absolute top-3 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-[11px] text-slate-300 border border-slate-700 pointer-events-none text-center shadow-lg">
-        Touche la carte pour ajouter un spot ici
+        Touche la carte pour ajouter un spot
       </div>
     </div>
 
-    <!-- Vue Liste -->
+    <!-- Vue Liste avec Onglets (Mes spots vs Publics) + Filtres & Tri -->
     <div id="list-view" class="w-full h-full bg-slate-900 overflow-y-auto p-4 pb-24 hidden space-y-3 z-10">
-      <div class="flex justify-between items-center mb-2">
-        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Tous les spots partagés</h2>
-        <span id="total-spots-badge" class="text-xs bg-slate-800 text-teal-400 px-2 py-0.5 rounded-full border border-slate-700">0 spots</span>
+      
+      <!-- Sélecteur d'onglet interne : Tous vs Mes Spots -->
+      <div class="grid grid-cols-2 gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+        <button id="subtab-all" onclick="switchListSubtab('all')" class="py-2 text-xs font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition">
+          Tous les spots (<span id="count-all">0</span>)
+        </button>
+        <button id="subtab-my" onclick="switchListSubtab('my')" class="py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition">
+          Mes spots (<span id="count-my">0</span>)
+        </button>
       </div>
-      <div id="spots-cards-container" class="space-y-3">
+
+      <!-- Filtres et Tri -->
+      <div class="flex gap-2">
+        <!-- Filtre Catégorie -->
+        <select id="filter-cat" onchange="renderLists()" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
+          <option value="all">Toutes catégories</option>
+          <option value="vue">🌄 Vues panoramiques</option>
+          <option value="detente">☕ Détente</option>
+          <option value="sport">🧗 Sport / Escalade</option>
+          <option value="baignade">🌊 Baignade</option>
+          <option value="nature">🌳 Nature</option>
+          <option value="autre">📍 Autre</option>
+        </select>
+
+        <!-- Sélecteur de Tri -->
+        <select id="sort-by" onchange="renderLists()" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
+          <option value="rating_desc">⭐ Meilleures notes</option>
+          <option value="reviews_desc">💬 Plus d'avis</option>
+          <option value="date_desc">🕒 Plus récents</option>
+          <option value="title_asc">🔤 Nom (A-Z)</option>
+        </select>
+      </div>
+
+      <!-- Conteneur des cartes -->
+      <div id="spots-cards-container" class="space-y-3 pt-1">
         <!-- Rempli en JS -->
       </div>
     </div>
@@ -79,7 +109,6 @@
     <div id="spot-sheet" class="bottom-sheet closed absolute bottom-0 left-0 right-0 max-h-[85%] bg-slate-800 border-t border-slate-700 rounded-t-3xl shadow-2xl z-[500] flex flex-col p-5 pb-8 overflow-y-auto">
       <div class="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-3 shrink-0"></div>
       
-      <!-- Photo du spot si existante -->
       <div id="sheet-image-container" class="hidden mb-3">
         <img id="sheet-image" src="" alt="Photo du spot" class="w-full h-44 object-cover rounded-2xl border border-slate-700 shadow-md">
       </div>
@@ -131,7 +160,7 @@
     </button>
   </nav>
 
-  <!-- Modal : Ajouter un spot avec Photo -->
+  <!-- Modal : Ajouter un spot -->
   <div id="modal-add" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[600] hidden items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center">
@@ -151,28 +180,26 @@
             <option value="detente">☕ Pause & Détente</option>
             <option value="sport">🧗 Escalade / Sport</option>
             <option value="baignade">🌊 Baignade / Plage</option>
-            <option value="nature">🌳 Nature / Arbre remarquable</option>
+            <option value="nature">🌳 Nature</option>
             <option value="autre">📍 Autre</option>
           </select>
         </div>
         <div>
-          <label class="block text-slate-400 mb-1">Description courte</label>
-          <textarea id="add-desc" rows="2" placeholder="Accès facile, calme, belle ombre..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500"></textarea>
+          <label class="block text-slate-400 mb-1">Description</label>
+          <textarea id="add-desc" rows="2" placeholder="Accès facile, belle vue..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500"></textarea>
         </div>
 
-        <!-- Champ Photo -->
         <div>
-          <label class="block text-slate-400 mb-1">Photo du spot (optionnel)</label>
+          <label class="block text-slate-400 mb-1">Photo (optionnel)</label>
           <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-teal-500 rounded-xl p-3 cursor-pointer bg-slate-900/60 transition text-center">
             <i class="fa-solid fa-camera text-slate-400 text-lg mb-1"></i>
-            <span id="photo-label-text" class="text-[11px] text-slate-300">Prendre ou choisir une photo</span>
-            <input type="file" id="add-photo" accept="image/*" class="hidden" onchange="handlePhotoSelect(event)">
+            <span id="photo-label-text" class="text-[11px] text-slate-300">Ajouter une photo</span>
+            <input type="file" id="add-photo" accept="image/*" class="hidden" onchange="handlePhotoSelect(event, 'add')">
           </label>
           
-          <!-- Prévisualisation Photo -->
           <div id="photo-preview-wrapper" class="relative hidden mt-2">
             <img id="photo-preview" src="" alt="Aperçu" class="w-full h-28 object-cover rounded-xl border border-slate-700">
-            <button onclick="removeSelectedPhoto()" type="button" class="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center shadow">
+            <button onclick="removePhoto('add')" type="button" class="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center shadow">
               <i class="fa-solid fa-xmark text-xs"></i>
             </button>
           </div>
@@ -194,8 +221,65 @@
       <input type="hidden" id="add-lng">
 
       <button id="btn-save-spot" onclick="saveSpotToFirebase()" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-2.5 rounded-xl transition active:scale-95 text-xs shadow-lg shadow-teal-500/20">
-        Publier pour tout le monde
+        Publier le spot
       </button>
+    </div>
+  </div>
+
+  <!-- Modal : Modifier mon spot -->
+  <div id="modal-edit" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[650] hidden items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center">
+        <h3 class="font-bold text-base text-white">Modifier mon Spot</h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <input type="hidden" id="edit-spot-id">
+
+      <div class="space-y-2.5 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Nom du lieu</label>
+          <input type="text" id="edit-title" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Catégorie</label>
+          <select id="edit-cat" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500">
+            <option value="vue">🌄 Vue panoramique</option>
+            <option value="detente">☕ Pause & Détente</option>
+            <option value="sport">🧗 Escalade / Sport</option>
+            <option value="baignade">🌊 Baignade / Plage</option>
+            <option value="nature">🌳 Nature</option>
+            <option value="autre">📍 Autre</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Description</label>
+          <textarea id="edit-desc" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1">Photo</label>
+          <div id="edit-photo-preview-wrapper" class="relative hidden mb-2">
+            <img id="edit-photo-preview" src="" alt="Aperçu" class="w-full h-28 object-cover rounded-xl border border-slate-700">
+            <button onclick="removePhoto('edit')" type="button" class="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center shadow">
+              <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+          </div>
+          <label class="flex flex-col items-center justify-center border border-dashed border-slate-700 rounded-xl p-2.5 cursor-pointer bg-slate-900/60 text-center">
+            <span class="text-[11px] text-teal-400">Remplacer la photo</span>
+            <input type="file" id="edit-photo" accept="image/*" class="hidden" onchange="handlePhotoSelect(event, 'edit')">
+          </label>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="deleteCurrentSpot()" class="flex-1 bg-rose-900/50 hover:bg-rose-800 text-rose-300 font-bold py-2.5 rounded-xl border border-rose-700/60 text-xs transition">
+          Supprimer
+        </button>
+        <button id="btn-save-edit" onclick="saveEditedSpot()" class="flex-1 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition">
+          Enregistrer
+        </button>
+      </div>
     </div>
   </div>
 
@@ -224,7 +308,7 @@
         </div>
         <div>
           <label class="block text-slate-400 mb-1">Commentaire</label>
-          <textarea id="rev-comment" rows="2" placeholder="Superbe endroit !" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500"></textarea>
+          <textarea id="rev-comment" rows="2" placeholder="Superbe vue !" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500"></textarea>
         </div>
       </div>
 
@@ -236,7 +320,7 @@
 
   <script>
     // ==========================================
-    // 1. CONFIGURATION FIREBASE
+    // 1. CONFIGURATION FIREBASE & IDENTIFIANT
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyCLhb4dgaX6_WCis384aZmZjWIZliI4WpY",
@@ -250,8 +334,15 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    // Identifiant unique anonyme stocké en local sur l'appareil
+    let myUserId = localStorage.getItem('locate_device_uid');
+    if (!myUserId) {
+      myUserId = 'user_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+      localStorage.setItem('locate_device_uid', myUserId);
+    }
+
     // ==========================================
-    // 2. INITIALISATION CARTE LEAFLET
+    // 2. CARTE LEAFLET
     // ==========================================
     const map = L.map('map', { zoomControl: false }).setView([43.70, 7.26], 13);
     
@@ -266,7 +357,9 @@
     let currentAddRating = 5;
     let currentRevRating = 5;
     let userLocationMarker = null;
-    let currentBase64Image = null;
+    let addBase64Image = null;
+    let editBase64Image = null;
+    let currentSubtab = 'all'; // 'all' ou 'my'
 
     const catColors = {
       vue: '#0284c7',
@@ -278,9 +371,9 @@
     };
 
     // ==========================================
-    // 3. COMPRESSION & GESTION PHOTO (CANVAS)
+    // 3. GESTION DES PHOTOS (CANVAS)
     // ==========================================
-    function handlePhotoSelect(event) {
+    function handlePhotoSelect(event, mode) {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -288,7 +381,6 @@
       reader.onload = function(e) {
         const img = new Image();
         img.onload = function() {
-          // Redimensionner à max 800px pour un poids ultra-léger (~50-80ko)
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
@@ -307,24 +399,37 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          currentBase64Image = canvas.toDataURL('image/jpeg', 0.7);
+          const base64 = canvas.toDataURL('image/jpeg', 0.7);
 
-          // Afficher la prévisualisation
-          document.getElementById('photo-preview').src = currentBase64Image;
-          document.getElementById('photo-preview-wrapper').classList.remove('hidden');
-          document.getElementById('photo-label-text').innerText = "Photo sélectionnée ✓";
+          if (mode === 'add') {
+            addBase64Image = base64;
+            document.getElementById('photo-preview').src = base64;
+            document.getElementById('photo-preview-wrapper').classList.remove('hidden');
+            document.getElementById('photo-label-text').innerText = "Photo sélectionnée ✓";
+          } else {
+            editBase64Image = base64;
+            document.getElementById('edit-photo-preview').src = base64;
+            document.getElementById('edit-photo-preview-wrapper').classList.remove('hidden');
+          }
         };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     }
 
-    function removeSelectedPhoto() {
-      currentBase64Image = null;
-      document.getElementById('add-photo').value = '';
-      document.getElementById('photo-preview').src = '';
-      document.getElementById('photo-preview-wrapper').classList.add('hidden');
-      document.getElementById('photo-label-text').innerText = "Prendre ou choisir une photo";
+    function removePhoto(mode) {
+      if (mode === 'add') {
+        addBase64Image = null;
+        document.getElementById('add-photo').value = '';
+        document.getElementById('photo-preview').src = '';
+        document.getElementById('photo-preview-wrapper').classList.add('hidden');
+        document.getElementById('photo-label-text').innerText = "Ajouter une photo";
+      } else {
+        editBase64Image = null;
+        document.getElementById('edit-photo').value = '';
+        document.getElementById('edit-photo-preview').src = '';
+        document.getElementById('edit-photo-preview-wrapper').classList.add('hidden');
+      }
     }
 
     // ==========================================
@@ -344,7 +449,8 @@
         });
 
         currentSpots = spots;
-        updateUI();
+        updateMapMarkers();
+        renderLists();
 
         if (selectedSpot) {
           const updated = currentSpots.find(s => s.id === selectedSpot.id);
@@ -363,24 +469,14 @@
       return (sum / reviews.length).toFixed(1);
     }
 
-    function updateUI() {
+    function updateMapMarkers() {
       Object.values(markersMap).forEach(m => map.removeLayer(m));
       markersMap = {};
 
-      const listContainer = document.getElementById('spots-cards-container');
-      listContainer.innerHTML = '';
-      document.getElementById('total-spots-badge').innerText = `${currentSpots.length} spot${currentSpots.length > 1 ? 's' : ''}`;
-
-      if (currentSpots.length === 0) {
-        listContainer.innerHTML = '<div class="text-center text-slate-500 py-10 text-xs">Aucun spot partagé pour l\'instant.<br>Touche la carte pour en ajouter un !</div>';
-      }
-
       currentSpots.forEach(spot => {
         const avg = calculateAverage(spot.reviews);
-        const count = spot.reviews ? spot.reviews.length : 0;
         const color = catColors[spot.category] || '#64748b';
 
-        // 1. Ajouter le marqueur sur la carte
         const customIcon = L.divIcon({
           className: '',
           html: `<div class="spot-marker-pin" style="background:${color}">${avg} <i class="fa-solid fa-star ml-1 text-amber-300"></i></div>`,
@@ -391,12 +487,80 @@
         const marker = L.marker([spot.lat, spot.lng], { icon: customIcon }).addTo(map);
         marker.on('click', () => openSpotDetails(spot));
         markersMap[spot.id] = marker;
+      });
+    }
 
-        // 2. Ajouter la carte dans la vue liste (avec miniature si présente)
+    // ==========================================
+    // 5. AFFICHAGE DES LISTES (FILTRES & TRI)
+    // ==========================================
+    function switchListSubtab(tab) {
+      currentSubtab = tab;
+      const btnAll = document.getElementById('subtab-all');
+      const btnMy = document.getElementById('subtab-my');
+
+      if (tab === 'all') {
+        btnAll.className = "py-2 text-xs font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition";
+        btnMy.className = "py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition";
+      } else {
+        btnMy.className = "py-2 text-xs font-bold rounded-lg bg-teal-500 text-slate-950 shadow transition";
+        btnAll.className = "py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition";
+      }
+      renderLists();
+    }
+
+    function renderLists() {
+      const container = document.getElementById('spots-cards-container');
+      const selectedCat = document.getElementById('filter-cat').value;
+      const sortBy = document.getElementById('sort-by').value;
+
+      // Calcul des compteurs
+      const mySpotsCount = currentSpots.filter(s => s.userId === myUserId).length;
+      document.getElementById('count-all').innerText = currentSpots.length;
+      document.getElementById('count-my').innerText = mySpotsCount;
+
+      // 1. Filtrer selon l'onglet actif (Tous vs Mes Spots)
+      let list = currentSubtab === 'my' 
+        ? currentSpots.filter(s => s.userId === myUserId) 
+        : [...currentSpots];
+
+      // 2. Filtrer par Catégorie
+      if (selectedCat !== 'all') {
+        list = list.filter(s => s.category === selectedCat);
+      }
+
+      // 3. Tri
+      list.sort((a, b) => {
+        const avgA = parseFloat(calculateAverage(a.reviews)) || 0;
+        const avgB = parseFloat(calculateAverage(b.reviews)) || 0;
+        const countA = a.reviews ? a.reviews.length : 0;
+        const countB = b.reviews ? b.reviews.length : 0;
+
+        if (sortBy === 'rating_desc') return avgB - avgA;
+        if (sortBy === 'reviews_desc') return countB - countA;
+        if (sortBy === 'date_desc') return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        if (sortBy === 'title_asc') return a.title.localeCompare(b.title);
+        return 0;
+      });
+
+      container.innerHTML = '';
+
+      if (list.length === 0) {
+        container.innerHTML = currentSubtab === 'my'
+          ? '<div class="text-center text-slate-500 py-10 text-xs">Vous n\'avez pas encore ajouté de spot.<br>Appuyez sur "+" ou touchez la carte pour en créer un !</div>'
+          : '<div class="text-center text-slate-500 py-10 text-xs">Aucun spot ne correspond à vos filtres.</div>';
+        return;
+      }
+
+      list.forEach(spot => {
+        const avg = calculateAverage(spot.reviews);
+        const count = spot.reviews ? spot.reviews.length : 0;
+        const color = catColors[spot.category] || '#64748b';
+        const isMine = spot.userId === myUserId;
+
         const card = document.createElement('div');
-        card.className = "bg-slate-800/90 border border-slate-700 rounded-2xl p-3 flex items-center justify-between active:scale-[0.99] transition";
+        card.className = "bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3 flex items-center justify-between shadow";
         card.innerHTML = `
-          <div class="flex items-center gap-3 overflow-hidden">
+          <div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" onclick="focusSpot('${spot.id}')">
             ${spot.image ? `<img src="${spot.image}" class="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-700" alt="spot">` : `
               <div class="w-14 h-14 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 text-slate-600">
                 <i class="fa-solid fa-image text-lg"></i>
@@ -408,26 +572,35 @@
                 <span class="text-xs font-bold text-amber-400 flex items-center gap-1">
                   ${avg} <i class="fa-solid fa-star text-[10px]"></i> (${count})
                 </span>
+                ${isMine ? `<span class="text-[9px] bg-teal-900/60 text-teal-300 px-1.5 py-0.5 rounded border border-teal-700/50">Moi</span>` : ''}
               </div>
               <h4 class="font-bold text-sm text-white truncate">${spot.title}</h4>
               <p class="text-xs text-slate-400 truncate mt-0.5">${spot.description || 'Pas de description'}</p>
             </div>
           </div>
-          <button onclick="focusSpot('${spot.id}')" class="w-8 h-8 bg-slate-700 text-teal-400 rounded-full flex items-center justify-center shrink-0 ml-2">
-            <i class="fa-solid fa-arrow-right text-xs"></i>
-          </button>
+
+          <div class="flex items-center gap-1.5 ml-2">
+            ${isMine ? `
+              <button onclick="openEditModal('${spot.id}')" title="Modifier" class="w-8 h-8 bg-slate-700/80 active:bg-slate-600 text-amber-300 rounded-full flex items-center justify-center">
+                <i class="fa-solid fa-pen text-xs"></i>
+              </button>
+            ` : ''}
+            <button onclick="focusSpot('${spot.id}')" title="Voir sur la carte" class="w-8 h-8 bg-slate-700 active:bg-slate-600 text-teal-400 rounded-full flex items-center justify-center">
+              <i class="fa-solid fa-arrow-right text-xs"></i>
+            </button>
+          </div>
         `;
-        listContainer.appendChild(card);
+        container.appendChild(card);
       });
     }
 
     // ==========================================
-    // 5. GESTION DES CLICS & MODALS
+    // 6. GESTION DES CLICS & MODALS
     // ==========================================
     map.on('click', (e) => {
       document.getElementById('add-lat').value = e.latlng.lat;
       document.getElementById('add-lng').value = e.latlng.lng;
-      removeSelectedPhoto();
+      removePhoto('add');
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
     });
@@ -436,7 +609,7 @@
       const center = map.getCenter();
       document.getElementById('add-lat').value = center.lat;
       document.getElementById('add-lng').value = center.lng;
-      removeSelectedPhoto();
+      removePhoto('add');
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
     }
@@ -444,7 +617,7 @@
     function closeAddModal() {
       document.getElementById('modal-add').classList.add('hidden');
       document.getElementById('modal-add').classList.remove('flex');
-      removeSelectedPhoto();
+      removePhoto('add');
     }
 
     function openSpotDetails(spot) {
@@ -453,7 +626,6 @@
       document.getElementById('sheet-category').innerText = spot.category;
       document.getElementById('sheet-desc').innerText = spot.description || 'Aucune description disponible.';
       
-      // Image du spot
       const imgContainer = document.getElementById('sheet-image-container');
       const imgElem = document.getElementById('sheet-image');
       if (spot.image) {
@@ -516,11 +688,82 @@
         document.getElementById('nav-btn-map').className = "flex flex-col items-center gap-1 text-slate-400";
         document.getElementById('nav-btn-list').className = "flex flex-col items-center gap-1 text-teal-400";
         closeSheet();
+        renderLists();
       }
     }
 
     // ==========================================
-    // 6. ENREGISTREMENT FIREBASE
+    // 7. ÉDITION & SUPPRESSION (MES SPOTS)
+    // ==========================================
+    function openEditModal(spotId) {
+      const spot = currentSpots.find(s => s.id === spotId);
+      if (!spot || spot.userId !== myUserId) return;
+
+      document.getElementById('edit-spot-id').value = spot.id;
+      document.getElementById('edit-title').value = spot.title;
+      document.getElementById('edit-cat').value = spot.category;
+      document.getElementById('edit-desc').value = spot.description || '';
+
+      editBase64Image = spot.image || null;
+      if (editBase64Image) {
+        document.getElementById('edit-photo-preview').src = editBase64Image;
+        document.getElementById('edit-photo-preview-wrapper').classList.remove('hidden');
+      } else {
+        document.getElementById('edit-photo-preview-wrapper').classList.add('hidden');
+      }
+
+      document.getElementById('modal-edit').classList.remove('hidden');
+      document.getElementById('modal-edit').classList.add('flex');
+    }
+
+    function closeEditModal() {
+      document.getElementById('modal-edit').classList.add('hidden');
+      document.getElementById('modal-edit').classList.remove('flex');
+    }
+
+    async function saveEditedSpot() {
+      const id = document.getElementById('edit-spot-id').value;
+      const title = document.getElementById('edit-title').value.trim();
+      const desc = document.getElementById('edit-desc').value.trim();
+      const category = document.getElementById('edit-cat').value;
+
+      if (!title) return alert("Le nom est obligatoire");
+
+      const btn = document.getElementById('btn-save-edit');
+      btn.innerText = "Enregistrement...";
+      btn.disabled = true;
+
+      try {
+        await db.collection('spots').doc(id).update({
+          title,
+          description: desc,
+          category,
+          image: editBase64Image || null
+        });
+        closeEditModal();
+      } catch (err) {
+        alert("Erreur lors de la modification : " + err.message);
+      } finally {
+        btn.innerText = "Enregistrer";
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteCurrentSpot() {
+      const id = document.getElementById('edit-spot-id').value;
+      if (!confirm("Voulez-vous vraiment supprimer ce spot ? Cette action est irréversible.")) return;
+
+      try {
+        await db.collection('spots').doc(id).delete();
+        closeEditModal();
+        closeSheet();
+      } catch (err) {
+        alert("Erreur lors de la suppression : " + err.message);
+      }
+    }
+
+    // ==========================================
+    // 8. PUBLICATION & AVIS FIREBASE
     // ==========================================
     async function saveSpotToFirebase() {
       const title = document.getElementById('add-title').value.trim();
@@ -541,7 +784,8 @@
         category: cat,
         lat,
         lng,
-        image: currentBase64Image || null,
+        image: addBase64Image || null,
+        userId: myUserId, // Lie le spot à votre appareil
         createdAt: new Date().toISOString(),
         reviews: [{
           author: "Créateur",
@@ -556,11 +800,11 @@
         closeAddModal();
         document.getElementById('add-title').value = '';
         document.getElementById('add-desc').value = '';
-        removeSelectedPhoto();
+        removePhoto('add');
       } catch (err) {
         alert("Erreur lors de l'enregistrement : " + err.message);
       } finally {
-        btn.innerText = "Publier pour tout le monde";
+        btn.innerText = "Publier le spot";
         btn.disabled = false;
       }
     }
@@ -599,7 +843,6 @@
       }
     }
 
-    // Gestion notation étoiles
     function setAddRating(n) {
       currentAddRating = n;
       const stars = document.getElementById('add-stars-container').children;
@@ -617,7 +860,7 @@
     }
 
     // ==========================================
-    // 7. GÉOLOCALISATION GPS
+    // 9. GÉOLOCALISATION GPS
     // ==========================================
     let isLocating = false;
 
@@ -681,7 +924,7 @@
       });
     }
 
-    // Démarrage de l'écoute Firestore
+    // Démarrage
     setupRealtimeSync();
   </script>
 </body>
