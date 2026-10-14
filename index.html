@@ -28,6 +28,8 @@
       font-weight: bold; color: white; border: 2px solid white; white-space: nowrap;
       padding: 4px 8px; font-size: 11px;
     }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body class="h-full bg-slate-900 text-slate-100 flex flex-col font-sans select-none overflow-hidden">
@@ -47,20 +49,31 @@
       </div>
     </div>
 
-    <button onclick="triggerLocate()" class="px-3 py-1.5 bg-slate-800 active:bg-slate-700 text-teal-400 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow">
-      <i class="fa-solid fa-location-crosshairs text-sm"></i>
-      <span>Moi</span>
-    </button>
+    <div class="flex items-center gap-2">
+      <!-- Toggle Mode Consultation / Ajout -->
+      <button id="btn-toggle-mode" onclick="toggleMapMode()" class="px-3 py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 transition">
+        <i id="mode-icon" class="fa-solid fa-eye text-teal-400"></i>
+        <span id="mode-text">Vue</span>
+      </button>
+
+      <!-- Bouton GPS -->
+      <button onclick="triggerLocate()" class="px-3 py-1.5 bg-slate-800 active:bg-slate-700 text-teal-400 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow">
+        <i class="fa-solid fa-location-crosshairs text-sm"></i>
+        <span>Moi</span>
+      </button>
+    </div>
   </header>
 
   <!-- Zone Principale : Vue Carte & Vue Liste -->
   <main class="flex-1 relative overflow-hidden">
     <!-- Vue Carte -->
-    <div id="map-view" class="w-full h-full">
+    <div id="map-view" class="w-full h-full relative">
       <div id="map" class="w-full h-full bg-slate-950"></div>
       
-      <div class="absolute top-3 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-[11px] text-slate-300 border border-slate-700 pointer-events-none text-center shadow-lg">
-        Touche la carte pour ajouter un spot
+      <!-- Indicateur du mode en cours -->
+      <div id="mode-banner" class="absolute top-3 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-full text-[11px] border border-slate-700 pointer-events-none text-center shadow-lg flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+        <span id="mode-banner-text" class="text-slate-300">Mode Consultation : exploration libre</span>
       </div>
     </div>
 
@@ -103,12 +116,25 @@
       </div>
     </div>
 
-    <!-- Bottom Sheet : Détails & Notation d'un spot -->
-    <div id="spot-sheet" class="bottom-sheet closed absolute bottom-0 left-0 right-0 max-h-[85%] bg-slate-800 border-t border-slate-700 rounded-t-3xl shadow-2xl z-[500] flex flex-col p-5 pb-8 overflow-y-auto">
-      <div class="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-3 shrink-0"></div>
+    <!-- Bottom Sheet : Détails d'un spot -->
+    <div id="spot-sheet" class="bottom-sheet closed absolute bottom-0 left-0 right-0 max-h-[88%] bg-slate-800 border-t border-slate-700 rounded-t-3xl shadow-2xl z-[500] flex flex-col p-4 pb-8 overflow-y-auto">
       
-      <div id="sheet-image-container" class="hidden mb-3">
-        <img id="sheet-image" src="" alt="Photo du spot" class="w-full h-44 object-cover rounded-2xl border border-slate-700 shadow-md">
+      <!-- Barre d'entête de la fiche avec Croix bien visible tout en haut -->
+      <div class="flex justify-between items-center mb-3">
+        <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto"></div>
+        <button onclick="closeSheet()" class="w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-200 flex items-center justify-center shadow-lg ml-auto">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+      
+      <!-- Carrousel de photos multiples -->
+      <div id="sheet-gallery-container" class="hidden mb-3">
+        <div class="relative w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-700 shadow-md">
+          <img id="sheet-main-photo" src="" alt="Photo" onclick="openLightboxFromSheet()" class="w-full h-52 object-cover cursor-pointer active:opacity-90 transition">
+          <span id="sheet-photo-counter" class="absolute bottom-2 right-2 bg-black/70 backdrop-blur px-2.5 py-1 rounded-full text-[10px] text-white font-medium">1 / 1</span>
+        </div>
+        <!-- Miniatures -->
+        <div id="sheet-thumbnails" class="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1"></div>
       </div>
 
       <div class="flex justify-between items-start mb-2">
@@ -116,9 +142,6 @@
           <span id="sheet-category" class="text-[10px] px-2 py-0.5 rounded-md font-semibold bg-teal-900/80 text-teal-300 uppercase">Catégorie</span>
           <h3 id="sheet-title" class="text-lg font-bold text-white mt-1">Nom du Spot</h3>
         </div>
-        <button onclick="closeSheet()" class="text-slate-400 hover:text-white p-1">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
       </div>
 
       <p id="sheet-desc" class="text-xs text-slate-300 mb-4">Description...</p>
@@ -143,6 +166,30 @@
     </div>
   </main>
 
+  <!-- Lightbox plein écran pour zoomer & naviguer dans les photos -->
+  <div id="lightbox" class="fixed inset-0 bg-black/95 z-[900] hidden flex-col justify-between p-4 backdrop-blur-md">
+    <div class="flex justify-between items-center text-white">
+      <span id="lightbox-counter" class="text-xs bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700">1 / 1</span>
+      <button onclick="closeLightbox()" class="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center text-lg shadow-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    
+    <div class="flex-1 flex items-center justify-center relative my-4 overflow-hidden">
+      <img id="lightbox-img" src="" class="max-h-full max-w-full object-contain rounded-lg shadow-2xl">
+      <button onclick="prevLightboxImage()" class="absolute left-2 w-10 h-10 rounded-full bg-slate-800/80 text-white flex items-center justify-center shadow-lg active:scale-90">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+      <button onclick="nextLightboxImage()" class="absolute right-2 w-10 h-10 rounded-full bg-slate-800/80 text-white flex items-center justify-center shadow-lg active:scale-90">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+    </div>
+
+    <div class="text-center text-slate-400 text-xs">
+      Glissez ou cliquez sur les flèches pour faire défiler
+    </div>
+  </div>
+
   <!-- Barre de navigation inférieure -->
   <nav class="bg-slate-900 border-t border-slate-800 flex items-center justify-around py-2 px-3 z-30 shrink-0">
     <button onclick="switchTab('map')" id="nav-btn-map" class="flex flex-col items-center gap-1 text-teal-400">
@@ -158,12 +205,12 @@
     </button>
   </nav>
 
-  <!-- Modal : Ajouter un spot -->
+  <!-- Modal : Ajouter un spot (Multi-photos) -->
   <div id="modal-add" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[600] hidden items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center">
         <h3 class="font-bold text-base text-white">Nouveau Spot</h3>
-        <button onclick="closeAddModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeAddModal()" class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
       </div>
 
       <div class="space-y-2.5 text-xs">
@@ -183,7 +230,7 @@
           </select>
         </div>
 
-        <!-- Coordonnées GPS Visibles & Interactives -->
+        <!-- Coordonnées GPS -->
         <div>
           <div class="flex justify-between items-center mb-1">
             <label class="text-slate-400">Coordonnées GPS</label>
@@ -194,11 +241,11 @@
           <div class="grid grid-cols-2 gap-2">
             <div>
               <span class="text-[10px] text-slate-500 block mb-0.5">Latitude</span>
-              <input type="number" step="any" id="add-lat" placeholder="43.7000" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
+              <input type="number" step="any" id="add-lat" placeholder="46.6033" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
             </div>
             <div>
               <span class="text-[10px] text-slate-500 block mb-0.5">Longitude</span>
-              <input type="number" step="any" id="add-lng" placeholder="7.2600" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
+              <input type="number" step="any" id="add-lng" placeholder="1.8883" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white focus:outline-none focus:border-teal-500 text-xs">
             </div>
           </div>
         </div>
@@ -208,20 +255,18 @@
           <textarea id="add-desc" rows="2" placeholder="Accès facile, belle vue..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-teal-500"></textarea>
         </div>
 
+        <!-- Section Photos multiples -->
         <div>
-          <label class="block text-slate-400 mb-1">Photo (optionnel)</label>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-slate-400">Photos du spot (<span id="add-photos-count">0</span>)</label>
+          </div>
           <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-teal-500 rounded-xl p-3 cursor-pointer bg-slate-900/60 transition text-center">
             <i class="fa-solid fa-camera text-slate-400 text-lg mb-1"></i>
-            <span id="photo-label-text" class="text-[11px] text-slate-300">Ajouter une photo</span>
-            <input type="file" id="add-photo" accept="image/*" class="hidden" onchange="handlePhotoSelect(event, 'add')">
+            <span class="text-[11px] text-slate-300">Ajouter une ou plusieurs photos</span>
+            <input type="file" id="add-photos-input" accept="image/*" multiple class="hidden" onchange="handleMultiplePhotos(event, 'add')">
           </label>
           
-          <div id="photo-preview-wrapper" class="relative hidden mt-2">
-            <img id="photo-preview" src="" alt="Aperçu" class="w-full h-28 object-cover rounded-xl border border-slate-700">
-            <button onclick="removePhoto('add')" type="button" class="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center shadow">
-              <i class="fa-solid fa-xmark text-xs"></i>
-            </button>
-          </div>
+          <div id="add-photos-grid" class="grid grid-cols-3 gap-2 mt-2"></div>
         </div>
 
         <div>
@@ -242,12 +287,12 @@
     </div>
   </div>
 
-  <!-- Modal : Modifier mon spot -->
+  <!-- Modal : Modifier mon spot (Multi-photos) -->
   <div id="modal-edit" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[650] hidden items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center">
         <h3 class="font-bold text-base text-white">Modifier mon Spot</h3>
-        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeEditModal()" class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
       </div>
 
       <input type="hidden" id="edit-spot-id">
@@ -287,17 +332,12 @@
         </div>
 
         <div>
-          <label class="block text-slate-400 mb-1">Photo</label>
-          <div id="edit-photo-preview-wrapper" class="relative hidden mb-2">
-            <img id="edit-photo-preview" src="" alt="Aperçu" class="w-full h-28 object-cover rounded-xl border border-slate-700">
-            <button onclick="removePhoto('edit')" type="button" class="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center shadow">
-              <i class="fa-solid fa-xmark text-xs"></i>
-            </button>
-          </div>
-          <label class="flex flex-col items-center justify-center border border-dashed border-slate-700 rounded-xl p-2.5 cursor-pointer bg-slate-900/60 text-center">
-            <span class="text-[11px] text-teal-400">Remplacer la photo</span>
-            <input type="file" id="edit-photo" accept="image/*" class="hidden" onchange="handlePhotoSelect(event, 'edit')">
+          <label class="block text-slate-400 mb-1">Photos (<span id="edit-photos-count">0</span>)</label>
+          <label class="flex flex-col items-center justify-center border border-dashed border-slate-700 rounded-xl p-2.5 cursor-pointer bg-slate-900/60 text-center mb-2">
+            <span class="text-[11px] text-teal-400">+ Ajouter d'autres photos</span>
+            <input type="file" id="edit-photos-input" accept="image/*" multiple class="hidden" onchange="handleMultiplePhotos(event, 'edit')">
           </label>
+          <div id="edit-photos-grid" class="grid grid-cols-3 gap-2"></div>
         </div>
       </div>
 
@@ -317,7 +357,7 @@
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3">
       <div class="flex justify-between items-center">
         <h3 class="font-bold text-base text-white">Ajouter un avis</h3>
-        <button onclick="closeReviewModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        <button onclick="closeReviewModal()" class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
       </div>
 
       <div class="space-y-3 text-xs">
@@ -349,7 +389,7 @@
 
   <script>
     // ==========================================
-    // 1. CONFIGURATION FIREBASE & IDENTIFIANT
+    // 1. FIREBASE & USER ID
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyCLhb4dgaX6_WCis384aZmZjWIZliI4WpY",
@@ -370,9 +410,10 @@
     }
 
     // ==========================================
-    // 2. CARTE LEAFLET
+    // 2. CARTE LEAFLET (OUVERTURE SUR LA FRANCE ENTIÈRE)
     // ==========================================
-    const map = L.map('map', { zoomControl: false }).setView([43.70, 7.26], 13);
+    // Coordonnées du centre de la France [46.603354, 1.888334] au zoom 6
+    const map = L.map('map', { zoomControl: false }).setView([46.603354, 1.888334], 6);
     
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Esri',
@@ -385,9 +426,17 @@
     let currentAddRating = 5;
     let currentRevRating = 5;
     let userLocationMarker = null;
-    let addBase64Image = null;
-    let editBase64Image = null;
     let currentSubtab = 'all';
+
+    // Gestion des deux modes de carte : 'view' ou 'add'
+    let currentMapMode = 'view'; 
+
+    // Gestion multi-photos
+    let addPhotosList = [];
+    let editPhotosList = [];
+    let currentSheetPhotos = [];
+    let currentSheetPhotoIndex = 0;
+    let currentLightboxIndex = 0;
 
     const catColors = {
       vue: '#0284c7',
@@ -399,69 +448,193 @@
     };
 
     // ==========================================
-    // 3. GESTION DES PHOTOS (CANVAS)
+    // 3. GESTION DES MODES DE CARTE (AJOUT vs VUE)
     // ==========================================
-    function handlePhotoSelect(event, mode) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          const maxDim = 800;
-
-          if (width > height && width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          const base64 = canvas.toDataURL('image/jpeg', 0.7);
-
-          if (mode === 'add') {
-            addBase64Image = base64;
-            document.getElementById('photo-preview').src = base64;
-            document.getElementById('photo-preview-wrapper').classList.remove('hidden');
-            document.getElementById('photo-label-text').innerText = "Photo sélectionnée ✓";
-          } else {
-            editBase64Image = base64;
-            document.getElementById('edit-photo-preview').src = base64;
-            document.getElementById('edit-photo-preview-wrapper').classList.remove('hidden');
-          }
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-
-    function removePhoto(mode) {
-      if (mode === 'add') {
-        addBase64Image = null;
-        document.getElementById('add-photo').value = '';
-        document.getElementById('photo-preview').src = '';
-        document.getElementById('photo-preview-wrapper').classList.add('hidden');
-        document.getElementById('photo-label-text').innerText = "Ajouter une photo";
+    function toggleMapMode() {
+      if (currentMapMode === 'view') {
+        currentMapMode = 'add';
+        document.getElementById('btn-toggle-mode').className = "px-3 py-1.5 bg-teal-500 text-slate-950 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-md shadow-teal-500/20";
+        document.getElementById('mode-icon').className = "fa-solid fa-plus-circle text-slate-950";
+        document.getElementById('mode-text').innerText = "Mode Ajout";
+        
+        document.getElementById('mode-banner').className = "absolute top-3 left-1/2 -translate-x-1/2 z-[400] bg-teal-950/90 border border-teal-500 backdrop-blur px-3 py-1.5 rounded-full text-[11px] pointer-events-none text-center shadow-lg flex items-center gap-2";
+        document.getElementById('mode-banner').children[0].className = "w-2 h-2 rounded-full bg-teal-400 animate-pulse";
+        document.getElementById('mode-banner-text').className = "text-teal-200 font-medium";
+        document.getElementById('mode-banner-text').innerText = "Mode Ajout actif : touche la carte pour placer un spot";
       } else {
-        editBase64Image = null;
-        document.getElementById('edit-photo').value = '';
-        document.getElementById('edit-photo-preview').src = '';
-        document.getElementById('edit-photo-preview-wrapper').classList.add('hidden');
+        currentMapMode = 'view';
+        document.getElementById('btn-toggle-mode').className = "px-3 py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-full text-xs font-semibold flex items-center gap-1.5 transition";
+        document.getElementById('mode-icon').className = "fa-solid fa-eye text-teal-400";
+        document.getElementById('mode-text').innerText = "Vue";
+
+        document.getElementById('mode-banner').className = "absolute top-3 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-full text-[11px] border border-slate-700 pointer-events-none text-center shadow-lg flex items-center gap-2";
+        document.getElementById('mode-banner').children[0].className = "w-2 h-2 rounded-full bg-slate-400";
+        document.getElementById('mode-banner-text').className = "text-slate-300";
+        document.getElementById('mode-banner-text').innerText = "Mode Consultation : exploration libre";
       }
     }
 
+    map.on('click', (e) => {
+      // En mode consultation, le clic ne crée rien !
+      if (currentMapMode !== 'add') return;
+
+      document.getElementById('add-lat').value = e.latlng.lat.toFixed(6);
+      document.getElementById('add-lng').value = e.latlng.lng.toFixed(6);
+      addPhotosList = [];
+      renderPhotosGrid('add');
+      document.getElementById('modal-add').classList.remove('hidden');
+      document.getElementById('modal-add').classList.add('flex');
+    });
+
     // ==========================================
-    // 4. SYNCHRONISATION EN TEMPS RÉEL (FIRESTORE)
+    // 4. COMPRESSION & GESTION MULTI-PHOTOS (CANVAS)
+    // ==========================================
+    async function compressImageFile(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 800;
+
+            if (width > height && width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleMultiplePhotos(event, mode) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      for (const file of files) {
+        const base64 = await compressImageFile(file);
+        if (mode === 'add') {
+          addPhotosList.push(base64);
+        } else {
+          editPhotosList.push(base64);
+        }
+      }
+      renderPhotosGrid(mode);
+      event.target.value = '';
+    }
+
+    function removePhotoByIndex(mode, index) {
+      if (mode === 'add') {
+        addPhotosList.splice(index, 1);
+        renderPhotosGrid('add');
+      } else {
+        editPhotosList.splice(index, 1);
+        renderPhotosGrid('edit');
+      }
+    }
+
+    function renderPhotosGrid(mode) {
+      const list = mode === 'add' ? addPhotosList : editPhotosList;
+      const grid = document.getElementById(`${mode}-photos-grid`);
+      document.getElementById(`${mode}-photos-count`).innerText = list.length;
+      grid.innerHTML = '';
+
+      list.forEach((imgBase64, idx) => {
+        const item = document.createElement('div');
+        item.className = "relative rounded-xl overflow-hidden border border-slate-700 aspect-square";
+        item.innerHTML = `
+          <img src="${imgBase64}" class="w-full h-full object-cover">
+          <button onclick="removePhotoByIndex('${mode}', ${idx})" type="button" class="absolute top-1 right-1 w-6 h-6 bg-rose-600/90 text-white rounded-full flex items-center justify-center text-xs shadow">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        `;
+        grid.appendChild(item);
+      });
+    }
+
+    // ==========================================
+    // 5. VISUALISATION DES PHOTOS & LIGHTBOX
+    // ==========================================
+    function setupSheetGallery(photos) {
+      const container = document.getElementById('sheet-gallery-container');
+      const thumbnails = document.getElementById('sheet-thumbnails');
+      currentSheetPhotos = photos || [];
+      currentSheetPhotoIndex = 0;
+
+      if (!currentSheetPhotos.length) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      displaySheetPhoto(0);
+
+      thumbnails.innerHTML = '';
+      if (currentSheetPhotos.length > 1) {
+        currentSheetPhotos.forEach((img, idx) => {
+          const thumb = document.createElement('img');
+          thumb.src = img;
+          thumb.className = `w-12 h-12 rounded-xl object-cover border-2 shrink-0 cursor-pointer ${idx === 0 ? 'border-teal-400' : 'border-transparent opacity-60'}`;
+          thumb.onclick = () => displaySheetPhoto(idx);
+          thumbnails.appendChild(thumb);
+        });
+      }
+    }
+
+    function displaySheetPhoto(index) {
+      currentSheetPhotoIndex = index;
+      document.getElementById('sheet-main-photo').src = currentSheetPhotos[index];
+      document.getElementById('sheet-photo-counter').innerText = `${index + 1} / ${currentSheetPhotos.length}`;
+
+      const thumbs = document.getElementById('sheet-thumbnails').children;
+      for (let i = 0; i < thumbs.length; i++) {
+        thumbs[i].className = `w-12 h-12 rounded-xl object-cover border-2 shrink-0 cursor-pointer ${i === index ? 'border-teal-400 opacity-100' : 'border-transparent opacity-60'}`;
+      }
+    }
+
+    function openLightboxFromSheet() {
+      if (!currentSheetPhotos.length) return;
+      currentLightboxIndex = currentSheetPhotoIndex;
+      showLightboxImage();
+      document.getElementById('lightbox').classList.remove('hidden');
+      document.getElementById('lightbox').classList.add('flex');
+    }
+
+    function showLightboxImage() {
+      document.getElementById('lightbox-img').src = currentSheetPhotos[currentLightboxIndex];
+      document.getElementById('lightbox-counter').innerText = `${currentLightboxIndex + 1} / ${currentSheetPhotos.length}`;
+    }
+
+    function nextLightboxImage() {
+      currentLightboxIndex = (currentLightboxIndex + 1) % currentSheetPhotos.length;
+      showLightboxImage();
+    }
+
+    function prevLightboxImage() {
+      currentLightboxIndex = (currentLightboxIndex - 1 + currentSheetPhotos.length) % currentSheetPhotos.length;
+      showLightboxImage();
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.add('hidden');
+      document.getElementById('lightbox').classList.remove('flex');
+    }
+
+    // ==========================================
+    // 6. FIRESTORE SYNC & UI
     // ==========================================
     function setupRealtimeSync() {
       const indicator = document.getElementById('sync-indicator');
@@ -518,9 +691,6 @@
       });
     }
 
-    // ==========================================
-    // 5. AFFICHAGE DES LISTES (FILTRES & TRI)
-    // ==========================================
     function switchListSubtab(tab) {
       currentSubtab = tab;
       const btnAll = document.getElementById('subtab-all');
@@ -570,7 +740,7 @@
 
       if (list.length === 0) {
         container.innerHTML = currentSubtab === 'my'
-          ? '<div class="text-center text-slate-500 py-10 text-xs">Vous n\'avez pas encore ajouté de spot.<br>Appuyez sur "+" ou touchez la carte pour en créer un !</div>'
+          ? '<div class="text-center text-slate-500 py-10 text-xs">Vous n\'avez pas encore ajouté de spot.</div>'
           : '<div class="text-center text-slate-500 py-10 text-xs">Aucun spot ne correspond à vos filtres.</div>';
         return;
       }
@@ -580,12 +750,15 @@
         const count = spot.reviews ? spot.reviews.length : 0;
         const color = catColors[spot.category] || '#64748b';
         const isMine = spot.userId === myUserId;
+        
+        // Image de couverture : première photo de la liste ou ancienne clé image
+        const coverImage = (spot.images && spot.images.length > 0) ? spot.images[0] : (spot.image || null);
 
         const card = document.createElement('div');
         card.className = "bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3 flex items-center justify-between shadow";
         card.innerHTML = `
           <div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" onclick="focusSpot('${spot.id}')">
-            ${spot.image ? `<img src="${spot.image}" class="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-700" alt="spot">` : `
+            ${coverImage ? `<img src="${coverImage}" class="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-700" alt="spot">` : `
               <div class="w-14 h-14 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 text-slate-600">
                 <i class="fa-solid fa-image text-lg"></i>
               </div>
@@ -619,21 +792,14 @@
     }
 
     // ==========================================
-    // 6. GESTION DES CLICS & MODALS
+    // 7. GESTION DES CLICS & MODALS
     // ==========================================
-    map.on('click', (e) => {
-      document.getElementById('add-lat').value = e.latlng.lat.toFixed(6);
-      document.getElementById('add-lng').value = e.latlng.lng.toFixed(6);
-      removePhoto('add');
-      document.getElementById('modal-add').classList.remove('hidden');
-      document.getElementById('modal-add').classList.add('flex');
-    });
-
     function openAddModal() {
       const center = map.getCenter();
       document.getElementById('add-lat').value = center.lat.toFixed(6);
       document.getElementById('add-lng').value = center.lng.toFixed(6);
-      removePhoto('add');
+      addPhotosList = [];
+      renderPhotosGrid('add');
       document.getElementById('modal-add').classList.remove('hidden');
       document.getElementById('modal-add').classList.add('flex');
     }
@@ -641,7 +807,6 @@
     function closeAddModal() {
       document.getElementById('modal-add').classList.add('hidden');
       document.getElementById('modal-add').classList.remove('flex');
-      removePhoto('add');
     }
 
     function fillAddModalWithCurrentGPS() {
@@ -660,14 +825,9 @@
       document.getElementById('sheet-category').innerText = spot.category;
       document.getElementById('sheet-desc').innerText = spot.description || 'Aucune description disponible.';
       
-      const imgContainer = document.getElementById('sheet-image-container');
-      const imgElem = document.getElementById('sheet-image');
-      if (spot.image) {
-        imgElem.src = spot.image;
-        imgContainer.classList.remove('hidden');
-      } else {
-        imgContainer.classList.add('hidden');
-      }
+      // Récupérer les photos (compatibilité multi-photos + ancienne clé unique 'image')
+      const photos = spot.images || (spot.image ? [spot.image] : []);
+      setupSheetGallery(photos);
 
       const avg = calculateAverage(spot.reviews);
       document.getElementById('sheet-rating').innerText = avg;
@@ -727,7 +887,7 @@
     }
 
     // ==========================================
-    // 7. ÉDITION & SUPPRESSION (MES SPOTS)
+    // 8. ÉDITION & SUPPRESSION (MES SPOTS)
     // ==========================================
     function openEditModal(spotId) {
       const spot = currentSpots.find(s => s.id === spotId);
@@ -740,13 +900,8 @@
       document.getElementById('edit-lng').value = spot.lng;
       document.getElementById('edit-desc').value = spot.description || '';
 
-      editBase64Image = spot.image || null;
-      if (editBase64Image) {
-        document.getElementById('edit-photo-preview').src = editBase64Image;
-        document.getElementById('edit-photo-preview-wrapper').classList.remove('hidden');
-      } else {
-        document.getElementById('edit-photo-preview-wrapper').classList.add('hidden');
-      }
+      editPhotosList = spot.images ? [...spot.images] : (spot.image ? [spot.image] : []);
+      renderPhotosGrid('edit');
 
       document.getElementById('modal-edit').classList.remove('hidden');
       document.getElementById('modal-edit').classList.add('flex');
@@ -779,7 +934,7 @@
           category,
           lat,
           lng,
-          image: editBase64Image || null
+          images: editPhotosList
         });
         closeEditModal();
       } catch (err) {
@@ -804,7 +959,7 @@
     }
 
     // ==========================================
-    // 8. PUBLICATION & AVIS FIREBASE
+    // 9. PUBLICATION & AVIS FIREBASE
     // ==========================================
     async function saveSpotToFirebase() {
       const title = document.getElementById('add-title').value.trim();
@@ -826,7 +981,7 @@
         category: cat,
         lat,
         lng,
-        image: addBase64Image || null,
+        images: addPhotosList,
         userId: myUserId,
         createdAt: new Date().toISOString(),
         reviews: [{
@@ -842,7 +997,11 @@
         closeAddModal();
         document.getElementById('add-title').value = '';
         document.getElementById('add-desc').value = '';
-        removePhoto('add');
+        addPhotosList = [];
+        renderPhotosGrid('add');
+        
+        // Rebascule en mode consultation après un ajout
+        if (currentMapMode === 'add') toggleMapMode();
       } catch (err) {
         alert("Erreur lors de l'enregistrement : " + err.message);
       } finally {
@@ -902,7 +1061,7 @@
     }
 
     // ==========================================
-    // 9. GÉOLOCALISATION GPS
+    // 10. GÉOLOCALISATION GPS
     // ==========================================
     let isLocating = false;
 
